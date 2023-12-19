@@ -1,80 +1,110 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <sys/time.h>
-#include <stdint.h>
+#include <mpi.h>
+#include <time.h>
 
-#define SIZE 100000000
-#define NUM_THREADS 2
+#define ARRAY_SIZE 1000
+#define GRAPH_SIZE 100
 
-double array[SIZE];
-
-void *sequentialSum(void *arg)
+// Selection Sort
+void swap(int *xp, int *yp)
 {
-    double sum = 0.0;
-    for (int i = 0; i < SIZE; i++)
-    {
-        sum += array[i];
-    }
-    pthread_exit((void *)(intptr_t)sum);
+    int temp = *xp;
+    *xp = *yp;
+    *yp = temp;
 }
 
-void *parallelSum(void *arg)
+void selectionSort(int arr[], int n)
 {
-    int thread_id = *((int *)arg);
-    int chunk_size = SIZE / NUM_THREADS;
-    int start = thread_id * chunk_size;
-    int end = (thread_id == NUM_THREADS - 1) ? SIZE : start + chunk_size;
-
-    double local_sum = 0.0;
-    for (int i = start; i < end; i++)
+    int i, j, min_idx;
+    for (i = 0; i < n-1; i++)
     {
-        local_sum += array[i];
+        min_idx = i;
+        for (j = i+1; j < n; j++)
+            if (arr[j] < arr[min_idx])
+                min_idx = j;
+        swap(&arr[min_idx], &arr[i]);
     }
-
-    pthread_exit((void *)(intptr_t)local_sum);
 }
 
-int main()
+// Parallel DFS using MPI
+int adjacency_matrix[GRAPH_SIZE][GRAPH_SIZE] =
 {
-    // Initialize array with some values
-    for (int i = 0; i < SIZE; i++)
+    {0, 1, 1, 0},
+    {1, 0, 0, 1},
+    {1, 0, 0, 1},
+    {0, 1, 1, 0}
+};
+
+int visited[GRAPH_SIZE] = {0};
+
+void DFS(int current_vertex)
+{
+    printf("Visited vertex: %d\n", current_vertex);
+    visited[current_vertex] = 1;
+
+    for (int i = 0; i < GRAPH_SIZE; i++)
     {
-        array[i] = i + 1;
+        if (!visited[i] && adjacency_matrix[current_vertex][i])
+            DFS(i);
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    // MPI Initialization
+    MPI_Init(&argc, &argv);
+
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    double start_time, end_time;
+
+    // Selection Sort
+    if (rank == 0)
+    {
+        int arr[ARRAY_SIZE];
+        for (int i = 0; i < ARRAY_SIZE; i++)
+        {
+            arr[i] = rand() % 1000; // Filling the array with random values for testing
+        }
+
+        printf("Unsorted array: ");
+        for (int i = 0; i < ARRAY_SIZE; i++)
+            printf("%d ", arr[i]);
+        printf("\n\n\n");
+
+        start_time = clock();
+        selectionSort(arr, ARRAY_SIZE);
+        end_time = clock();
+
+        printf("Sorted array: ");
+        for (int i = 0; i < ARRAY_SIZE; i++)
+            printf("%d ", arr[i]);
+        printf("\n\n\n");
+
+        printf("Time taken for Selection Sort: %lf seconds\n\n", (end_time - start_time) / CLOCKS_PER_SEC);
     }
 
-    pthread_t threads[NUM_THREADS];
-    struct timeval start, end;
+    // Parallel DFS using MPI
+    MPI_Barrier(MPI_COMM_WORLD); // Synchronize processes before starting DFS
 
-    // Sequential Sum
-    gettimeofday(&start, NULL);
-    double sequential_result = 0.0;
-    pthread_create(&threads[0], NULL, sequentialSum, NULL);
-    pthread_join(threads[0], (void **)&sequential_result);
-    gettimeofday(&end, NULL);
-
-    printf("Sequential Sum: %f\n", sequential_result);
-    printf("Sequential Time: %ld microseconds\n", (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec));
-
-    // Parallel Sum
-    gettimeofday(&start, NULL);
-    double parallel_results[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++)
+    if (rank == 0)
     {
-        int *thread_id = malloc(sizeof(int));
-        *thread_id = i;
-        pthread_create(&threads[i], NULL, parallelSum, (void *)thread_id);
+        start_time = MPI_Wtime();
     }
-    double parallel_sum = 0.0;
-    for (int i = 0; i < NUM_THREADS; i++)
-    {
-        pthread_join(threads[i], (void **)&parallel_results[i]);
-        parallel_sum += (double)(intptr_t)parallel_results[i];
-    }
-    gettimeofday(&end, NULL);
 
-    printf("Parallel Sum: %f\n", parallel_sum);
-    printf("Parallel Time: %ld microseconds\n", (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec));
+    int start_vertex = 0; // Starting vertex for DFS
+    DFS(start_vertex);
+
+    if (rank == 0)
+    {
+        end_time = MPI_Wtime();
+        printf("\nTime taken for Parallel DFS using MPI: %lf seconds\n\n", end_time - start_time);
+    }
+
+    MPI_Finalize();
 
     return 0;
 }
