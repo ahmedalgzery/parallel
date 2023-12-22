@@ -15,8 +15,8 @@ Following the Selection Sort section, the code presents a parallel implementatio
 To compile and execute the code, you'll need to have MPI installed on your system. Use a command like the following:
 
 ```bash
-mpicc -o parallel_algorithm parallel_algorithm.c -lm -lpthread
-mpirun -np <number_of_processes> ./parallel_algorithm
+mpicc -o test test.c -lm -lpthread
+mpirun -np 2 ./parallel_algorithm
 ```
 
 ## Notes
